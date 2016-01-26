@@ -14,3 +14,11 @@ Usage of siphon:
   -startDate string
     	Start date for datapoint collection. (default "2016-Jan-18")
 ```
+
+# ulimit
+
+Errors can appear related to opening files or sockets if your user's ulimit is too low for the number of metrics you are saving. Increase your ulimit to avoid this problem.
+
+```
+ulimit -n 10000
+```
