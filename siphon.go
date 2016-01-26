@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,12 +56,13 @@ func main() {
 	totalMetrics := 0
 	// Display arguments
 	fmt.Println("Querying account for metrics with these settings:")
-	fmt.Printf("Region: %s\n", *region)
-	fmt.Printf("Start Date: %s\n", startTime)
-	fmt.Printf("End Date: %s\n", endTime)
-	fmt.Printf("Period: %d\n", *period)
-	fmt.Printf("Saving to: %s\n", *baseDir)
+	fmt.Printf("\tRegion: %s\n", *region)
+	fmt.Printf("\tStart Date: %s\n", startTime)
+	fmt.Printf("\tEnd Date: %s\n", endTime)
+	fmt.Printf("\tPeriod: %d\n", *period)
+	fmt.Printf("\tSaving to: %s\n", *baseDir)
 	// Get all pages of metrics
+	fmt.Println("Searching for non-empty datapoints:")
 	err := svc.ListMetricsPages(params, func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
 		totalMetrics += len(page.Metrics)
 		for _, metric := range page.Metrics {
@@ -74,7 +76,7 @@ func main() {
 
 	// Print the page count
 	wg.Wait()
-	fmt.Printf("Searched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
+	fmt.Printf("\nSearched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
 }
 
 // Grabs datapoints from CloudWatch API and writes them to disk
@@ -118,7 +120,7 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		err := os.MkdirAll(dirname, 0755)
 		check(err)
 		// Open/create file for writing/appending
-		fmt.Printf("Writing %v data points to %v\n", len(resp.Datapoints), filename)
+		fmt.Printf(strings.Repeat(".", len(resp.Datapoints)))
 		json, err := json.Marshal(resp)
 		check(err)
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
