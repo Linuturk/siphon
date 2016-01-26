@@ -2,17 +2,26 @@
 Siphon off and archive CloudWatch Metrics.
 
 ```
+$ siphon -h
 Usage of siphon:
   -baseDir string
     	Base directory to store datapoint file structure. (default "/tmp/cloudwatch")
+  -duration string
+    	Subtract duration from Now for the metric search. (default "24h")
   -endDate string
-    	End date for datapoint collection. (default "2016-Jan-20")
+    	End date for datapoint collection. (ex. 2006-Jan-02)
   -period int
-    	Period is the length of time associated with a specific Amazon CloudWatch statistic. (default 300)
+    	Period is the length of time associated with a specific CloudWatch statistic. (default 300)
   -region string
     	AWS Region to siphon metrics. (default "us-east-1")
   -startDate string
-    	Start date for datapoint collection. (default "2016-Jan-18")
+    	Start date for datapoint collection. (ex. 2006-Jan-02)
+```
+
+# installation
+
+```
+go get -u github.com/linuturk/siphon
 ```
 
 # ulimit
