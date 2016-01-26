@@ -13,48 +13,60 @@ import (
 )
 
 // Dateform
-const shortForm = "2006-Jan-02"
+const shortForm string = "2006-Jan-02"
 
-// Parse command line options
-var regionPtr = flag.String("region", "us-east-1", "AWS Region to siphon metrics.")
-var periodPtr = flag.Int64("period", 300, "Period is the length of time associated with a specific Amazon CloudWatch statistic.")
-var baseDirPtr = flag.String("baseDir", "/tmp/cloudwatch", "Base directory to store datapoint file structure.")
-var startDatePtr = flag.String("startDate", "2016-Jan-18", "Start date for datapoint collection.")
-var endDatePtr = flag.String("endDate", "2016-Jan-20", "End date for datapoint collection.")
+var (
+	// Parse command line options
+	region       = flag.String("region", "us-east-1", "AWS Region to siphon metrics.")
+	period       = flag.Int64("period", 300, "Period is the length of time associated with a specific CloudWatch statistic.")
+	baseDir      = flag.String("baseDir", "/tmp/cloudwatch", "Base directory to store datapoint file structure.")
+	startDatePtr = flag.String("startDate", "", "Start date for datapoint collection. (ex. 2006-Jan-02)")
+	endDatePtr   = flag.String("endDate", "", "End date for datapoint collection. (ex. 2006-Jan-02)")
+	durationPtr  = flag.String("duration", "24h", "Subtract duration from Now for the metric search.")
+)
 
-// Set friendly variable names
-var region = *regionPtr
-var period = *periodPtr
-var baseDir = *baseDirPtr
-var startTime, _ = time.Parse(shortForm, *startDatePtr)
-var endTime, _ = time.Parse(shortForm, *endDatePtr)
-
+// Convenience function for error checking
 func check(e error) {
 	if e != nil {
 		fmt.Println(e.Error())
-		return
 	}
 }
 
 func main() {
 	// Parse flags
 	flag.Parse()
+	// Process start and end dates
+	duration, _ := time.ParseDuration(*durationPtr)
+	var startTime, endTime time.Time
+	if (*startDatePtr != "") && (*endDatePtr != "") {
+		startTime, _ = time.Parse(shortForm, *startDatePtr)
+		endTime, _ = time.Parse(shortForm, *endDatePtr)
+	} else {
+		startTime = time.Now()
+		endTime = startTime.Add(duration)
+	}
 	// Create a CloudWatch service object
-	var svc = cloudwatch.New(session.New(), &aws.Config{Region: aws.String(region)})
+	var svc = cloudwatch.New(session.New(), &aws.Config{Region: region})
 	// Create WaitGroup
 	var wg sync.WaitGroup
 	// Send an empty parameter set to get all metrics in the region
 	params := &cloudwatch.ListMetricsInput{}
 	// Count how many metrics we get back
 	totalMetrics := 0
+	// Display arguments
+	fmt.Println("Querying account for metrics with these settings:")
+	fmt.Printf("Region: %s\n", *region)
+	fmt.Printf("Start Date: %s\n", startTime)
+	fmt.Printf("End Date: %s\n", endTime)
+	fmt.Printf("Period: %d\n", *period)
+	fmt.Printf("Saving to: %s\n", *baseDir)
 	// Get all pages of metrics
-	fmt.Println("Querying account for metrics...")
 	err := svc.ListMetricsPages(params, func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
 		totalMetrics += len(page.Metrics)
 		for _, metric := range page.Metrics {
 			// Add to WaitGroup
 			wg.Add(1)
-			go getDataPoints(*metric, svc, &wg)
+			go getDataPoints(*metric, svc, &wg, startTime, endTime)
 		}
 		return true
 	})
@@ -62,10 +74,11 @@ func main() {
 
 	// Print the page count
 	wg.Wait()
-	fmt.Printf("Got %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
+	fmt.Printf("Searched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
 }
 
-func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup) {
+// Grabs datapoints from CloudWatch API and writes them to disk
+func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup, startTime, endTime time.Time) {
 	// Signal WaitGroup
 	defer wg.Done()
 	// Set search parameters
@@ -73,7 +86,7 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		EndTime:    aws.Time(endTime),
 		MetricName: metric.MetricName,
 		Namespace:  metric.Namespace,
-		Period:     aws.Int64(period),
+		Period:     period,
 		StartTime:  aws.Time(startTime),
 		Statistics: []*string{
 			aws.String("SampleCount"),
@@ -94,11 +107,11 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		var filename string
 		var dirname string
 		if metric.Dimensions != nil {
-			filename = fmt.Sprintf("%s/%s/%s/%s", baseDir, *metric.Namespace, *metric.Dimensions[0].Name, *metric.Dimensions[0].Value)
-			dirname = fmt.Sprintf("%s/%s/%s", baseDir, *metric.Namespace, *metric.Dimensions[0].Name)
+			filename = fmt.Sprintf("%s/%s/%s/%s", *baseDir, *metric.Namespace, *metric.Dimensions[0].Name, *metric.Dimensions[0].Value)
+			dirname = fmt.Sprintf("%s/%s/%s", *baseDir, *metric.Namespace, *metric.Dimensions[0].Name)
 		} else {
-			filename = fmt.Sprintf("%s/%s/%s", baseDir, *metric.Namespace, *metric.MetricName)
-			dirname = fmt.Sprintf("%s/%s", baseDir, *metric.Namespace)
+			filename = fmt.Sprintf("%s/%s/%s", *baseDir, *metric.Namespace, *metric.MetricName)
+			dirname = fmt.Sprintf("%s/%s", *baseDir, *metric.Namespace)
 		}
 
 		// Create any missing directories
