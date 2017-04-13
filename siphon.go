@@ -47,7 +47,7 @@ func main() {
 		endTime = startTime.Add(duration)
 	}
 	// Create a CloudWatch service object
-	var svc = cloudwatch.New(session.New(), &aws.Config{Region: region})
+	svc := cloudwatch.New(session.New(), &aws.Config{Region: region})
 	// Create WaitGroup
 	var wg sync.WaitGroup
 	// Send an empty parameter set to get all metrics in the region
