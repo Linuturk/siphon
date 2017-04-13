@@ -30,7 +30,7 @@ func main() {
 
 	// Defaults
 	now := time.Now()
-	later := now.Add(24 * time.Hour)
+	earlier := now.Add(-24 * time.Hour)
 
 	// Handle the start/end strings
 	endTime, err := time.Parse("2006-Jan-02", *end)
@@ -42,8 +42,8 @@ func main() {
 	startTime, err := time.Parse("2006-Jan-02", *start)
 	if err != nil {
 		log.Println(err)
-		log.Printf("Invalid or no start set. Using %s as start time.", later)
-		startTime = later
+		log.Printf("Invalid or no start set. Using %s as start time.", earlier)
+		startTime = earlier
 	}
 
 	// Display arguments
