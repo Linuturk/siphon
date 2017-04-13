@@ -15,38 +15,37 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-// Dateform
-const shortForm string = "2006-Jan-02"
-
 var (
-	// Parse command line options
-	region       = flag.String("region", "us-east-1", "AWS Region to siphon metrics.")
-	period       = flag.Int64("period", 300, "Period is the length of time associated with a specific CloudWatch statistic.")
-	baseDir      = flag.String("baseDir", "/tmp/cloudwatch", "Base directory to store datapoint file structure.")
-	startDatePtr = flag.String("startDate", "", "Start date for datapoint collection. (ex. 2006-Jan-02)")
-	endDatePtr   = flag.String("endDate", "", "End date for datapoint collection. (ex. 2006-Jan-02)")
-	durationPtr  = flag.String("duration", "24h", "Subtract duration from Now for the metric search.")
+	region  = flag.String("region", "us-east-1", "AWS Region to siphon metrics.")
+	period  = flag.Int64("period", 300, "Period is the length of time associated with a specific CloudWatch statistic.")
+	baseDir = flag.String("baseDir", "/tmp/cloudwatch", "Base directory to store datapoint file structure.")
+	start   = flag.String("start", "", "Start date for datapoint collection. (ex. 2006-Jan-02)")
+	end     = flag.String("end", "", "End date for datapoint collection. (ex. 2006-Jan-02)")
 )
 
 func main() {
+
 	// Parse flags
 	flag.Parse()
-	// Process start and end dates
-	duration, _ := time.ParseDuration(*durationPtr)
-	startTime := time.Now()
-	endTime := startTime.Add(duration)
-	if (*startDatePtr != "") && (*endDatePtr != "") {
-		startTime, _ = time.Parse(shortForm, *startDatePtr)
-		endTime, _ = time.Parse(shortForm, *endDatePtr)
+
+	// Defaults
+	now := time.Now()
+	later := now.Add(24 * time.Hour)
+
+	// Handle the start/end strings
+	endTime, err := time.Parse("2006-Jan-02", *end)
+	if err != nil {
+		log.Println(err)
+		log.Printf("Invalid or no end set. Using %s as end time.", now)
+		endTime = now
 	}
-	// Create a CloudWatch service object
-	svc := cloudwatch.New(session.New(), &aws.Config{Region: region})
-	// Create WaitGroup
-	var wg sync.WaitGroup
-	// Send an empty parameter set to get all metrics in the region
-	params := &cloudwatch.ListMetricsInput{}
-	// Count how many metrics we get back
-	totalMetrics := 0
+	startTime, err := time.Parse("2006-Jan-02", *start)
+	if err != nil {
+		log.Println(err)
+		log.Printf("Invalid or no start set. Using %s as start time.", later)
+		startTime = later
+	}
+
 	// Display arguments
 	log.Println("Querying account for metrics with these settings:")
 	log.Printf("\tRegion: %s\n", *region)
@@ -54,30 +53,44 @@ func main() {
 	log.Printf("\tEnd Date: %s\n", endTime)
 	log.Printf("\tPeriod: %d\n", *period)
 	log.Printf("\tSaving to: %s\n", *baseDir)
+
+	// Create a CloudWatch service object
+	svc := cloudwatch.New(session.New(), &aws.Config{Region: region})
+
+	// Create WaitGroup
+	var wg sync.WaitGroup
+
+	// Send an empty parameter set to get all metrics in the region
+	params := &cloudwatch.ListMetricsInput{}
+
+	// Count how many metrics we get back
+	totalMetrics := 0
+
 	// Get all pages of metrics
 	log.Println("Searching for non-empty datapoints:")
-	err := svc.ListMetricsPages(params, func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
-		totalMetrics += len(page.Metrics)
-		for _, metric := range page.Metrics {
-			// Add to WaitGroup
-			wg.Add(1)
-			go getDataPoints(*metric, svc, &wg, startTime, endTime)
-		}
-		return true
-	})
+	err = svc.ListMetricsPages(params,
+		func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
+			totalMetrics += len(page.Metrics)
+			for _, metric := range page.Metrics {
+				wg.Add(1)
+				go getDataPoints(*metric, svc, &wg, startTime, endTime)
+			}
+			return true
+		})
 	if err != nil {
 		log.Println(err)
 	}
 
 	// Print the page count
 	wg.Wait()
-	log.Printf("\nSearched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
+	log.Printf("Searched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
 }
 
 // Grabs datapoints from CloudWatch API and writes them to disk
 func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup, startTime, endTime time.Time) error {
 	// Signal WaitGroup
 	defer wg.Done()
+
 	// Set search parameters
 	params := &cloudwatch.GetMetricStatisticsInput{
 		EndTime:    aws.Time(endTime),
@@ -95,11 +108,13 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		Dimensions: metric.Dimensions,
 		Unit:       aws.String("Seconds"),
 	}
+
 	// use metric to query GetMetricStatistics
 	resp, err := svc.GetMetricStatistics(params)
 	if err != nil {
 		return err
 	}
+
 	// Check for data points
 	if resp.Datapoints != nil {
 		// Build directory structure
@@ -118,6 +133,7 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		if err != nil {
 			return err
 		}
+
 		// Open/create file for writing/appending
 		log.Printf(strings.Repeat(".", len(resp.Datapoints)))
 		json, err := json.Marshal(resp)
