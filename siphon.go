@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -27,25 +28,16 @@ var (
 	durationPtr  = flag.String("duration", "24h", "Subtract duration from Now for the metric search.")
 )
 
-// Convenience function for error checking
-func check(e error) {
-	if e != nil {
-		fmt.Println(e.Error())
-	}
-}
-
 func main() {
 	// Parse flags
 	flag.Parse()
 	// Process start and end dates
 	duration, _ := time.ParseDuration(*durationPtr)
-	var startTime, endTime time.Time
+	startTime := time.Now()
+	endTime := startTime.Add(duration)
 	if (*startDatePtr != "") && (*endDatePtr != "") {
 		startTime, _ = time.Parse(shortForm, *startDatePtr)
 		endTime, _ = time.Parse(shortForm, *endDatePtr)
-	} else {
-		startTime = time.Now()
-		endTime = startTime.Add(duration)
 	}
 	// Create a CloudWatch service object
 	svc := cloudwatch.New(session.New(), &aws.Config{Region: region})
@@ -56,14 +48,14 @@ func main() {
 	// Count how many metrics we get back
 	totalMetrics := 0
 	// Display arguments
-	fmt.Println("Querying account for metrics with these settings:")
-	fmt.Printf("\tRegion: %s\n", *region)
-	fmt.Printf("\tStart Date: %s\n", startTime)
-	fmt.Printf("\tEnd Date: %s\n", endTime)
-	fmt.Printf("\tPeriod: %d\n", *period)
-	fmt.Printf("\tSaving to: %s\n", *baseDir)
+	log.Println("Querying account for metrics with these settings:")
+	log.Printf("\tRegion: %s\n", *region)
+	log.Printf("\tStart Date: %s\n", startTime)
+	log.Printf("\tEnd Date: %s\n", endTime)
+	log.Printf("\tPeriod: %d\n", *period)
+	log.Printf("\tSaving to: %s\n", *baseDir)
 	// Get all pages of metrics
-	fmt.Println("Searching for non-empty datapoints:")
+	log.Println("Searching for non-empty datapoints:")
 	err := svc.ListMetricsPages(params, func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
 		totalMetrics += len(page.Metrics)
 		for _, metric := range page.Metrics {
@@ -73,15 +65,17 @@ func main() {
 		}
 		return true
 	})
-	check(err)
+	if err != nil {
+		log.Println(err)
+	}
 
 	// Print the page count
 	wg.Wait()
-	fmt.Printf("\nSearched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
+	log.Printf("\nSearched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
 }
 
 // Grabs datapoints from CloudWatch API and writes them to disk
-func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup, startTime, endTime time.Time) {
+func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup, startTime, endTime time.Time) error {
 	// Signal WaitGroup
 	defer wg.Done()
 	// Set search parameters
@@ -103,7 +97,9 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 	}
 	// use metric to query GetMetricStatistics
 	resp, err := svc.GetMetricStatistics(params)
-	check(err)
+	if err != nil {
+		return err
+	}
 	// Check for data points
 	if resp.Datapoints != nil {
 		// Build directory structure
@@ -119,14 +115,24 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 
 		// Create any missing directories
 		err := os.MkdirAll(dirname, 0755)
-		check(err)
+		if err != nil {
+			return err
+		}
 		// Open/create file for writing/appending
-		fmt.Printf(strings.Repeat(".", len(resp.Datapoints)))
+		log.Printf(strings.Repeat(".", len(resp.Datapoints)))
 		json, err := json.Marshal(resp)
-		check(err)
+		if err != nil {
+			return err
+		}
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-		check(err)
+		if err != nil {
+			return err
+		}
 		defer f.Close()
 		_, err = f.Write(json)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
