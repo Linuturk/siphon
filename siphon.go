@@ -66,7 +66,7 @@ func main() {
 	// Count how many metrics we get back
 	totalMetrics := 0
 
-	// Get all pages of metrics
+	// Get all metric by page
 	log.Println("Searching for non-empty datapoints:")
 	err = svc.ListMetricsPages(params,
 		func(page *cloudwatch.ListMetricsOutput, lastPage bool) bool {
@@ -86,7 +86,7 @@ func main() {
 	log.Printf("Searched %d metrics from %s to %s.\n", totalMetrics, startTime, endTime)
 }
 
-// Grabs datapoints from CloudWatch API and writes them to disk
+// Grabs datapoints for each metric and writes them to disk
 func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *sync.WaitGroup, startTime, endTime time.Time) error {
 	// Signal WaitGroup
 	defer wg.Done()
