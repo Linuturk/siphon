@@ -6,15 +6,13 @@ $ siphon -h
 Usage of siphon:
   -baseDir string
     	Base directory to store datapoint file structure. (default "/tmp/cloudwatch")
-  -duration string
-    	Subtract duration from Now for the metric search. (default "24h")
-  -endDate string
+  -end string
     	End date for datapoint collection. (ex. 2006-Jan-02)
   -period int
     	Period is the length of time associated with a specific CloudWatch statistic. (default 300)
   -region string
     	AWS Region to siphon metrics. (default "us-east-1")
-  -startDate string
+  -start string
     	Start date for datapoint collection. (ex. 2006-Jan-02)
 ```
 
