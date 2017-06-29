@@ -121,6 +121,7 @@ func getDataPoints(metric cloudwatch.Metric, svc *cloudwatch.CloudWatch, wg *syn
 		var filename string
 		var dirname string
 		if metric.Dimensions != nil {
+			// filename = filepath.join(args...) TODO
 			filename = fmt.Sprintf("%s/%s/%s/%s", *baseDir, *metric.Namespace, *metric.Dimensions[0].Name, *metric.Dimensions[0].Value)
 			dirname = fmt.Sprintf("%s/%s/%s", *baseDir, *metric.Namespace, *metric.Dimensions[0].Name)
 		} else {
